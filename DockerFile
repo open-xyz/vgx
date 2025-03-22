@@ -1,9 +1,0 @@
-FROM golang:1.21-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN go build -o vibe-guard ./cmd/cli
-
-FROM alpine:latest
-COPY --from=builder /app/vibe-guard /usr/local/bin/
-RUN apk add --no-cache git semgrep
-ENTRYPOINT ["vibe-guard"]

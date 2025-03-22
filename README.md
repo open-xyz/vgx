@@ -50,6 +50,14 @@ EOF
 chmod +x .git/hooks/pre-commit
 ```
 
+## Bypassing the Hook (Emergency Override)
+
+**Emergency Override:** To bypass the pre-commit hook in urgent situations:
+
+```bash
+git commit -m "Critical fix" --no-verify
+```
+
 ## Configuration
 
 - Create a `.env` file in your project root:

@@ -1,6 +1,8 @@
-module github.com/open-xyz/vibe-guard
+module github.com/open-xyz/vgx
 
-go 1.24.1
+go 1.23.0
+
+toolchain go1.24.1
 
 require (
 	github.com/go-git/go-git/v5 v5.14.0

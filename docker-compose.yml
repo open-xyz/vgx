@@ -1,0 +1,14 @@
+version: "3"
+
+services:
+  vgx:
+    image: ghcr.io/open-xyz/vgx:latest
+    container_name: vgx-service
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.vgx/cache:/app/cache
+    ports:
+      - "127.0.0.1:9977:8080"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}

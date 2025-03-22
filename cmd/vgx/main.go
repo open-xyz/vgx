@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/open-xyz/vibe-guard/pkg/git"
-	"github.com/open-xyz/vibe-guard/pkg/scanner"
+	"github.com/open-xyz/vgx/pkg/git"
+	"github.com/open-xyz/vgx/pkg/scanner"
 )
 
 func main() {
