@@ -2,6 +2,8 @@ package scanner
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/open-xyz/vgx/pkg/cache"
 	"github.com/open-xyz/vgx/pkg/types"
@@ -34,30 +36,58 @@ func ScanFiles(files []string) ([]types.Vulnerability, error) {
 		
 		allVulnerabilities = append(allVulnerabilities, vulns...)
 
-		// Optional: Also analyze with OpenAI if configured
-		if len(vulns) == 0 {
-			// Only if Semgrep didn't find anything, use OpenAI as second opinion
+		// Also analyze with OpenAI if configured and no vulnerabilities found with semgrep
+		if shouldUseOpenAI() && len(vulns) == 0 {
 			// Read file content
-			// content, err := os.ReadFile(file)
-			// if err == nil {
-			//     result, err := AnalyzeWithOpenAI(string(content))
-			//     if err == nil && strings.HasPrefix(result, "UNSAFE:") {
-			//         vulnResult := Vulnerability{
-			//             File:        file,
-			//             Description: strings.TrimPrefix(result, "UNSAFE: "),
-			//             Severity:    "medium",
-			//             Source:      "openai",
-			//         }
-			//         allVulnerabilities = append(allVulnerabilities, vulnResult)
-			//         
-			//         // Also cache the OpenAI result
-			//         if err := cache.Store(file, []Vulnerability{vulnResult}); err != nil {
-			//             fmt.Printf("Warning: Failed to cache OpenAI results for %s: %v\n", file, err)
-			//         }
-			//     }
-			// }
+			content, err := os.ReadFile(file)
+			if err == nil {
+				openaiVulns, err := AnalyzeWithOpenAI(string(content), file)
+				if err != nil {
+					fmt.Printf("Warning: OpenAI analysis failed: %v\n", err)
+				} else if openaiVulns != nil && len(openaiVulns) > 0 {
+					allVulnerabilities = append(allVulnerabilities, openaiVulns...)
+					
+					// Also cache the OpenAI results
+					if err := cache.Store(file, openaiVulns); err != nil {
+						fmt.Printf("Warning: Failed to cache OpenAI results for %s: %v\n", file, err)
+					}
+				}
+			}
 		}
 	}
 
 	return allVulnerabilities, nil
+}
+
+// ScanContent scans code content for security vulnerabilities without requiring a file
+func ScanContent(content string, identifier string) ([]types.Vulnerability, error) {
+	// First attempt to use OpenAI for analysis
+	var vulnerabilities []types.Vulnerability
+	
+	if shouldUseOpenAI() {
+		openaiVulns, err := AnalyzeWithOpenAI(content, identifier)
+		if err == nil && openaiVulns != nil && len(openaiVulns) > 0 {
+			vulnerabilities = append(vulnerabilities, openaiVulns...)
+		}
+	}
+	
+	// More scanners can be added here
+	
+	return vulnerabilities, nil
+}
+
+// shouldUseOpenAI checks if OpenAI integration should be used
+func shouldUseOpenAI() bool {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return false
+	}
+	
+	// Check for explicit disabling
+	disableOpenAI := os.Getenv("DISABLE_OPENAI")
+	if strings.ToLower(disableOpenAI) == "true" || disableOpenAI == "1" {
+		return false
+	}
+	
+	return true
 }
