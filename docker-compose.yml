@@ -1,14 +1,22 @@
 version: "3"
 
 services:
-  vgx:
-    image: ghcr.io/open-xyz/vgx:latest
-    container_name: vgx-service
-    restart: unless-stopped
+  vgx-scanner:
+    build: .
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.vgx/cache:/app/cache
-    ports:
-      - "127.0.0.1:9977:8080"
+      # Mount the target codebase to scan
+      - ${SCAN_TARGET:-./}:/scan
+      # Mount persistent context directory
+      - vgx-context:/root/.vgx
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Pass OpenAI API key from host if available
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Pass VibePenTester API key from host if available
+      - VIBE_API_KEY=${VIBE_API_KEY:-}
+      - VIBE_ENABLED=${VIBE_ENABLED:-false}
+      - VIBE_SERVER_URL=${VIBE_SERVER_URL:-http://localhost:5050}
+    command: ${SCAN_CMD:-scan-changes}
+
+volumes:
+  vgx-context:
+    # Named volume for persistent context storage

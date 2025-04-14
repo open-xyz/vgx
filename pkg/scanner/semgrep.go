@@ -8,6 +8,14 @@ import (
 	"github.com/open-xyz/vgx/pkg/types"
 )
 
+// Control flags
+var skipSemgrepErrors = false
+
+// SetSkipSemgrepErrors enables or disables semgrep error reporting
+func SetSkipSemgrepErrors(skip bool) {
+	skipSemgrepErrors = skip
+}
+
 // SemgrepResult represents the JSON output format of semgrep
 type SemgrepResult struct {
 	Results struct {
@@ -28,12 +36,32 @@ type SemgrepResult struct {
 
 // Run Semgrep scan
 func RunSemgrep(file string) ([]types.Vulnerability, error) {
+	// Check if the semgrep command is available
+	_, err := exec.LookPath("semgrep")
+	if err != nil {
+		// Semgrep is not installed
+		if skipSemgrepErrors {
+			return nil, nil
+		}
+		return []types.Vulnerability{
+			{
+				File:        file,
+				Description: "Semgrep is not installed. Please install it with 'pip install semgrep'",
+				Severity:    "info",
+				Source:      "semgrep",
+			},
+		}, nil
+	}
+
 	// Run semgrep with JSON output for better parsing
 	cmd := exec.Command("semgrep", "--json", "--config=auto", file)
 	output, err := cmd.CombinedOutput()
 	
 	// Check for execution errors (except for finding vulnerabilities)
 	if err != nil && !strings.Contains(string(output), "findings") {
+		if skipSemgrepErrors {
+			return nil, nil
+		}
 		return []types.Vulnerability{
 			{
 				File:        file,
@@ -53,6 +81,9 @@ func parseSemgrepOutput(output []byte, file string) ([]types.Vulnerability, erro
 	// If output is empty or doesn't look like JSON, return simple error
 	if len(output) == 0 || !strings.HasPrefix(string(output), "{") {
 		if len(output) > 0 && strings.TrimSpace(string(output)) != "" {
+			if skipSemgrepErrors {
+				return nil, nil
+			}
 			return []types.Vulnerability{
 				{
 					File:        file,
@@ -71,6 +102,9 @@ func parseSemgrepOutput(output []byte, file string) ([]types.Vulnerability, erro
 		// If JSON parsing fails, fall back to simple detection
 		if strings.Contains(string(output), "\"findings\":") && 
 		   !strings.Contains(string(output), "\"findings\": []") {
+			if skipSemgrepErrors {
+				return nil, nil
+			}
 			return []types.Vulnerability{
 				{
 					File:        file,

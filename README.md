@@ -8,6 +8,8 @@ A Git pre-commit security scanner with OpenAI and VibePenTester integration to d
 - 🤖 **AI-powered analysis**: Leverage OpenAI to detect complex security vulnerabilities
 - 🛡️ **Semgrep integration**: Use rule-based scanning alongside AI detection
 - 🔌 **VibePenTester integration**: Connect with VibePenTester for enhanced security analysis
+- 🧠 **Contextual awareness**: Analyzes changes with full codebase context for more accurate results
+- 📊 **Security reporting**: Generate comprehensive security reports for audits
 - ⚡ **Fast & lightweight**: Written in Go for maximum performance
 - 🔌 **Extensible**: Easy to customize and extend for your specific needs
 
@@ -34,6 +36,18 @@ vgx
 
 # Specify files to scan
 vgx file1.js file2.py
+
+# Scan only changed files with context (default)
+vgx --changes=true
+
+# Scan all files (not just changes)
+vgx --changes=false
+
+# Generate a security report after scanning
+vgx --report=true
+
+# Update the codebase context after scanning
+vgx --update-context=true
 ```
 
 ## VibePenTester CLI Tool
