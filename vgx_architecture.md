@@ -22,13 +22,7 @@ VGX uses multiple detection engines:
    - Provides context-aware vulnerability detection
    - Understands complex code patterns and potential security risks
 
-2. **Rule-based Scanning (Semgrep)**
-
-   - Uses predefined security rules
-   - Fast and deterministic detection
-   - Good for known vulnerability patterns
-
-3. **VibePenTester Integration**
+2. **VibePenTester Integration**
    - External security scanning service
    - Provides additional depth in vulnerability detection
    - Optional integration for enhanced security
