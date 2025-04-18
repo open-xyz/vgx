@@ -55,7 +55,7 @@ func NewContextManager() (*ContextManager, error) {
 	}
 
 	contextFile := filepath.Join(contextDir, "context.json")
-	
+
 	manager := &ContextManager{
 		contextDir:  contextDir,
 		contextFile: contextFile,
@@ -254,36 +254,82 @@ func (m *ContextManager) GenerateReport(vulnerabilities []map[string]interface{}
 	reportFile := filepath.Join(reportDir, fmt.Sprintf("security-report-%s.md", timestamp))
 
 	var report strings.Builder
-	report.WriteString("# VGX Security Scan Report\n\n")
-	report.WriteString(fmt.Sprintf("Generated: %s\n\n", time.Now().Format(time.RFC1123)))
+	report.WriteString("# 🛡️ VGX Security Scan Report\n\n")
+	report.WriteString(fmt.Sprintf("📅 Generated: %s\n\n", time.Now().Format(time.RFC1123)))
 
-	report.WriteString("## Files Scanned\n\n")
+	report.WriteString("## 📁 Files Scanned\n\n")
 	for _, file := range scannedFiles {
 		report.WriteString(fmt.Sprintf("- %s\n", file))
 	}
 	report.WriteString("\n")
 
 	if len(vulnerabilities) > 0 {
-		report.WriteString("## Vulnerabilities Found\n\n")
+		report.WriteString("## 🚨 Vulnerabilities Found\n\n")
 		
 		for i, vuln := range vulnerabilities {
-			report.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, vuln["description"]))
+			// Add emoji based on severity
+			severityEmoji := "⚠️" // Default (medium)
+			if sev, ok := vuln["severity"].(string); ok {
+				switch strings.ToLower(sev) {
+				case "critical":
+					severityEmoji = "💥"
+				case "high":
+					severityEmoji = "🔴"
+				case "medium":
+					severityEmoji = "🟠"
+				case "low":
+					severityEmoji = "🟡"
+				case "info":
+					severityEmoji = "🔵"
+				}
+			}
+			
+			description := ""
+			if desc, ok := vuln["description"].(string); ok {
+				description = desc
+			}
+			
+			report.WriteString(fmt.Sprintf("### %d. %s %s\n\n", i+1, severityEmoji, description))
 			report.WriteString(fmt.Sprintf("- **File**: %s\n", vuln["file"]))
 			report.WriteString(fmt.Sprintf("- **Severity**: %s\n", vuln["severity"]))
 			
-			if line, ok := vuln["line"].(int); ok && line > 0 {
+			line := 0
+			if lineVal, ok := vuln["line"].(int); ok && lineVal > 0 {
+				line = lineVal
 				report.WriteString(fmt.Sprintf("- **Line**: %d\n", line))
 			}
 			
+			// Try to get the code snippet if the file exists
+			if filePath, ok := vuln["file"].(string); ok && line > 0 {
+				content, err := m.getCodeSnippet(filePath, line, 5)
+				if err == nil {
+					report.WriteString("\n**Vulnerable Code**:\n")
+					report.WriteString("```javascript\n")
+					report.WriteString(content)
+					report.WriteString("\n```\n")
+				}
+			}
+			
 			if recommendation, ok := vuln["recommendation"].(string); ok && recommendation != "" {
-				report.WriteString(fmt.Sprintf("\n**Recommendation**: %s\n", recommendation))
+				report.WriteString(fmt.Sprintf("\n**💡 Recommendation**: %s\n", recommendation))
+			}
+			
+			// Add corrected code example based on vulnerability type
+			if desc, ok := vuln["description"].(string); ok {
+				correctedCode := m.getFixedCodeExample(desc, vuln)
+				if correctedCode != "" {
+					report.WriteString("\n**✅ Fixed Code Example**:\n")
+					report.WriteString("```javascript\n")
+					report.WriteString(correctedCode)
+					report.WriteString("\n```\n")
+				}
 			}
 			
 			report.WriteString("\n")
 		}
 	} else {
-		report.WriteString("## No Vulnerabilities Found\n\n")
-		report.WriteString("✅ Great job! No security issues were detected in the scanned files.\n\n")
+		report.WriteString("## ✅ No Vulnerabilities Found\n\n")
+		report.WriteString("🎉 Great job! No security issues were detected in the scanned files.\n\n")
 	}
 
 	if err := ioutil.WriteFile(reportFile, []byte(report.String()), 0644); err != nil {
@@ -292,6 +338,280 @@ func (m *ContextManager) GenerateReport(vulnerabilities []map[string]interface{}
 
 	fmt.Printf("Report generated: %s\n", reportFile)
 	return nil
+}
+
+// getCodeSnippet retrieves a code snippet from a file centered around the specified line
+func (m *ContextManager) getCodeSnippet(filePath string, line, context int) (string, error) {
+	bytes, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return "", err
+	}
+	
+	content := string(bytes)
+	lines := strings.Split(content, "\n")
+	
+	if line > len(lines) {
+		return "", fmt.Errorf("line number out of range")
+	}
+	
+	start := line - context
+	if start < 0 {
+		start = 0
+	}
+	
+	end := line + context
+	if end > len(lines) {
+		end = len(lines)
+	}
+	
+	var snippet strings.Builder
+	for i := start; i < end; i++ {
+		if i+1 == line {
+			snippet.WriteString(fmt.Sprintf("➡️ %d: %s\n", i+1, lines[i]))
+		} else {
+			snippet.WriteString(fmt.Sprintf("   %d: %s\n", i+1, lines[i]))
+		}
+	}
+	
+	return snippet.String(), nil
+}
+
+// getFixedCodeExample provides a corrected code example for a specific vulnerability type
+func (m *ContextManager) getFixedCodeExample(description string, vuln map[string]interface{}) string {
+	// Parse the description to determine the vulnerability type
+	descLower := strings.ToLower(description)
+	
+	if strings.Contains(descLower, "information disclosure") && strings.Contains(descLower, "error logging") {
+		return `// Create a safe error logging function
+const logger = {
+  error: (message, error) => {
+    // Only log non-sensitive information
+    console.error(`+"`"+`[ERROR] ${message}: ${error.message || 'Unknown error'}`+"`"+`);
+    
+    // For debugging in development only
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('Error details:', error);
+    }
+  }
+};`
+	} else if strings.Contains(descLower, "jwt") && strings.Contains(descLower, "algorithm not enforced") {
+		return `// Specify the algorithm in the JWT verification
+const decoded = jwt.verify(token, config.jwtSecret, { 
+  algorithms: ['HS256'] // Explicitly specify the algorithms to use
+});`
+	} else if strings.Contains(descLower, "case-sensitive comparison") {
+		return `// Use case-insensitive comparison for email
+if (config.adminUsers.some(email => email.toLowerCase() === req.user.email.toLowerCase())) {
+  next();
+} else {
+  res.status(403).json({ message: "Admin access required" });
+}`
+	} else if strings.Contains(descLower, "input sanitization") {
+		return `// Use a comprehensive sanitization library
+const sanitizeHtml = require('sanitize-html');
+
+function sanitizeInput(input) {
+  if (typeof input === 'string') {
+    return sanitizeHtml(input, {
+      allowedTags: ['b', 'i', 'em', 'strong', 'a'],
+      allowedAttributes: {
+        'a': ['href', 'target']
+      }
+    });
+  }
+  return input;
+}`
+	} else if strings.Contains(descLower, "timing attack") {
+		return `// Use a constant-time comparison function
+const crypto = require('crypto');
+
+function constantTimeCompare(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') {
+    return false;
+  }
+  
+  // Create buffers of same length
+  const aBuffer = Buffer.from(a);
+  const bBuffer = Buffer.from(b);
+  
+  // Use crypto's timingSafeEqual
+  try {
+    return crypto.timingSafeEqual(aBuffer, bBuffer);
+  } catch (e) {
+    return false;
+  }
+}`
+	} else if strings.Contains(descLower, "jwt") && strings.Contains(descLower, "expiration") {
+		return `// Use stronger secret and reasonable expiration
+const token = jwt.sign(
+  user, 
+  process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex'), 
+  { 
+    expiresIn: '1h' // Shorter expiration time
+  }
+);`
+	} else if strings.Contains(descLower, "idor") {
+		return `// Verify the user ID properly
+app.get("/api/user/profile", authMiddleware, async (req, res) => {
+  try {
+    // Get the requested userId
+    const requestedUserId = req.query.id;
+    
+    // If another user's ID is requested, check if admin
+    if (requestedUserId && requestedUserId !== req.user.id) {
+      if (!req.user.isAdmin) {
+        return res.status(403).json({ 
+          message: "Access denied: You can only access your own profile" 
+        });
+      }
+    }
+    
+    // Use authenticated user's ID or verified requested ID
+    const userId = requestedUserId || req.user.id;
+    
+    // ... rest of the function
+  } catch (error) {
+    // ...
+  }
+});`
+	} else if strings.Contains(descLower, "ssrf") {
+		return `// Implement URL validation to prevent SSRF
+const URL = require('url').URL;
+
+app.post("/api/data/import", authMiddleware, async (req, res) => {
+  try {
+    const { url } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ message: "URL required" });
+    }
+
+    // Validate URL and check against allowlist
+    try {
+      const parsedUrl = new URL(url);
+      
+      // Define allowlist of domains
+      const allowedDomains = ['api.example.com', 'data.example.org'];
+      
+      if (!allowedDomains.includes(parsedUrl.hostname)) {
+        return res.status(403).json({ 
+          message: "Domain not allowed for security reasons" 
+        });
+      }
+      
+      // Ensure protocol is https
+      if (parsedUrl.protocol !== 'https:') {
+        return res.status(403).json({ 
+          message: "Only HTTPS URLs are allowed" 
+        });
+      }
+      
+      // Now safe to make the request
+      const response = await axios.get(url);
+      res.json({ message: "Import successful", count: response.data.length });
+    } catch (urlError) {
+      return res.status(400).json({ message: "Invalid URL" });
+    }
+  } catch (error) {
+    // ... error handling
+  }
+});`
+	} else if strings.Contains(descLower, "prototype pollution") {
+		return `// Prevent prototype pollution
+const safeObjectAssign = (target, source) => {
+  // Create a new object to avoid direct prototype pollution
+  const result = Object.assign({}, target);
+  
+  // Only copy own properties, ignoring prototype properties
+  if (source && typeof source === 'object') {
+    Object.keys(source).forEach(key => {
+      // Prevent __proto__ or constructor assignment
+      if (key !== '__proto__' && key !== 'constructor' && 
+          Object.prototype.hasOwnProperty.call(source, key)) {
+        result[key] = source[key];
+      }
+    });
+  }
+  
+  return result;
+};
+
+// Use the safe function
+const mergedOptions = safeObjectAssign(defaultOptions, options);`
+	} else if strings.Contains(descLower, "information disclosure") && !strings.Contains(descLower, "error logging") {
+		return `// Remove sensitive information from system info
+app.get("/api/system/info", authMiddleware, isAdmin, (req, res) => {
+  try {
+    // Only expose non-sensitive information
+    const sysInfo = {
+      environment: process.env.NODE_ENV,
+      nodeVersion: process.versions.node,
+      uptime: process.uptime(),
+      // Do not include environment variables or file paths
+    };
+
+    res.json(sysInfo);
+  } catch (error) {
+    // ... error handling
+  }
+});`
+	} else if strings.Contains(descLower, "encryption parameters") {
+		return `// Improve encryption with stronger parameters and random IV
+const encryptionService = {
+  encrypt: (data, userKey) => {
+    try {
+      // Use stronger key derivation with more iterations and better hash
+      const salt = crypto.randomBytes(16);
+      const key = crypto.pbkdf2Sync(
+        userKey || process.env.ENCRYPTION_KEY,
+        salt,
+        100000, // Increased iterations
+        32,
+        'sha256' // Stronger hash algorithm
+      );
+
+      // Random IV for each encryption
+      const iv = crypto.randomBytes(16);
+      const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+      
+      let encrypted = cipher.update(JSON.stringify(data), 'utf8', 'hex');
+      encrypted += cipher.final('hex');
+      
+      // Include auth tag for GCM mode
+      const authTag = cipher.getAuthTag();
+      
+      // Return all parameters needed for decryption
+      return {
+        encrypted,
+        iv: iv.toString('hex'),
+        salt: salt.toString('hex'),
+        authTag: authTag.toString('hex')
+      };
+    } catch (error) {
+      // ... error handling
+    }
+  }
+};`
+	} else if strings.Contains(descLower, "template injection") {
+		return `// Use a safe templating library
+const handlebars = require('handlebars');
+
+function renderTemplate(template, data) {
+  try {
+    // Compile the template using Handlebars
+    const compiledTemplate = handlebars.compile(template);
+    
+    // Render the template with the provided data
+    return compiledTemplate(data);
+  } catch (error) {
+    console.error('Template rendering error:', error.message);
+    return '';
+  }
+}`
+	}
+	
+	// Default case if no specific match
+	return "";
 }
 
 // CleanupOldReports removes reports older than a certain age
